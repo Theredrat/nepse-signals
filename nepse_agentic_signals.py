@@ -19,7 +19,6 @@ def fetch_nepse_data():
             data = scraper.get_today_price()
             df = pd.DataFrame(data)
             
-            # Safe column mapping
             rename_map = {
                 'symbol': 'SYMBOL',
                 'lastTradedPrice': 'LTP',
@@ -32,25 +31,18 @@ def fetch_nepse_data():
             }
             df = df.rename(columns=rename_map)
             
-            # Create missing columns safely
-            if 'SYMBOL' not in df.columns:
-                df['SYMBOL'] = df.get('symbol', 'Unknown')
-            if 'LTP' not in df.columns:
-                df['LTP'] = 0.0
-            if 'CHANGE%' not in df.columns:
-                df['CHANGE%'] = 0.0
-            if 'VOLUME' not in df.columns:
-                df['VOLUME'] = 0
-            if 'TRADES' not in df.columns:
-                df['TRADES'] = 0
+            if 'SYMBOL' not in df.columns: df['SYMBOL'] = 'Unknown'
+            if 'LTP' not in df.columns: df['LTP'] = 0.0
+            if 'CHANGE%' not in df.columns: df['CHANGE%'] = 0.0
+            if 'VOLUME' not in df.columns: df['VOLUME'] = 0
+            if 'TRADES' not in df.columns: df['TRADES'] = 0
             
-            # Convert numbers
             for col in ['LTP', 'CHANGE%', 'VOLUME', 'TRADES']:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
             return df[['SYMBOL', 'LTP', 'CHANGE%', 'VOLUME', 'TRADES']]
     except Exception as e:
-        st.error(f"⚠️ Data issue: {str(e)[:150]}\nPlease try Refresh button.")
+        st.error(f"⚠️ Cannot fetch data right now.\nError: {str(e)[:100]}")
         return pd.DataFrame(columns=['SYMBOL', 'LTP', 'CHANGE%', 'VOLUME', 'TRADES'])
 
 stocks = fetch_nepse_data()
@@ -77,7 +69,7 @@ def generate_note(row):
     if row['CHANGE%'] > 1.5:
         return f"Strong momentum (+{row['CHANGE%']:.2f}%) 🧠"
     elif row['VOLUME'] > 50000:
-        return f"High volume spike 🧠"
+        return f"High volume spike detected 🧠"
     else:
         return f"Stable conservative signal 🧠"
 
@@ -87,16 +79,15 @@ col1, col2 = st.columns([3, 1])
 with col1:
     st.subheader("📊 Live Agentic Signals")
     display_cols = ['SYMBOL', 'LTP', 'CHANGE%', 'SCORE', 'CONFIDENCE', 'AGENT_NOTE']
-    styled = signals[display_cols].style.background_gradient(cmap='RdYlGn', subset=['SCORE', 'CHANGE%'])
-    st.dataframe(styled, use_container_width=True, hide_index=True)
+    st.dataframe(signals[display_cols], use_container_width=True, hide_index=True)
 
 with col2:
     st.metric("Active Signals", len(signals))
     st.metric("Avg Score", f"{signals['SCORE'].mean():.3f}")
-    st.success("✅ Live NEPSE Data")
+    st.success("✅ Connected to NEPSE")
 
 if st.button("🔄 Refresh Live Data", type="primary"):
     st.cache_data.clear()
     st.rerun()
 
-st.caption("Your own NEPSE Signals Platform • Educational only")
+st.caption("Your personal NEPSE Agentic Signals Platform • Educational purpose only")
