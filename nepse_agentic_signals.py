@@ -10,7 +10,7 @@ st.set_page_config(page_title="NEPSE Agentic Signals", layout="wide", initial_si
 st.title("🚨 NEPSE Agentic Signals Engine")
 st.markdown("**Real-time • Conservative Signals** | *Not financial advice*")
 
-@st.cache_data(ttl=180)
+@st.cache_data(ttl=60)
 def fetch_nepse_data():
     try:
         from nepse_scraper import NepseScraper
@@ -31,23 +31,22 @@ def fetch_nepse_data():
             }
             df = df.rename(columns=rename_map)
             
-            if 'SYMBOL' not in df.columns: df['SYMBOL'] = 'Unknown'
-            if 'LTP' not in df.columns: df['LTP'] = 0.0
-            if 'CHANGE%' not in df.columns: df['CHANGE%'] = 0.0
-            if 'VOLUME' not in df.columns: df['VOLUME'] = 0
-            if 'TRADES' not in df.columns: df['TRADES'] = 0
+            # Safe column creation
+            for col in ['SYMBOL', 'LTP', 'CHANGE%', 'VOLUME', 'TRADES']:
+                if col not in df.columns:
+                    df[col] = 0 if col != 'SYMBOL' else 'Unknown'
             
             for col in ['LTP', 'CHANGE%', 'VOLUME', 'TRADES']:
                 df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
             return df[['SYMBOL', 'LTP', 'CHANGE%', 'VOLUME', 'TRADES']]
-    except Exception as e:
-        st.error(f"⚠️ Cannot fetch data right now.\nError: {str(e)[:100]}")
+    except:
         return pd.DataFrame(columns=['SYMBOL', 'LTP', 'CHANGE%', 'VOLUME', 'TRADES'])
 
 stocks = fetch_nepse_data()
 
 if len(stocks) == 0:
+    st.error("Unable to fetch data. Please try Refresh.")
     st.stop()
 
 def agentic_score(row):
@@ -60,13 +59,14 @@ def agentic_score(row):
 stocks['SCORE'] = stocks.apply(agentic_score, axis=1)
 stocks['CONFIDENCE'] = np.where(stocks['SCORE'] > 0.55, 'High', 
                                np.where(stocks['SCORE'] > 0.40, 'Medium', 'Low'))
-stocks['DIRECTION'] = 'LONG'
 
 signals = stocks[stocks['SCORE'] >= 0.23].copy()
 signals = signals.sort_values('SCORE', ascending=False).reset_index(drop=True)
 
 def generate_note(row):
-    if row['CHANGE%'] > 1.5:
+    if row['LTP'] == 0:
+        return "Market closed or no data yet 🕒"
+    elif row['CHANGE%'] > 1.5:
         return f"Strong momentum (+{row['CHANGE%']:.2f}%) 🧠"
     elif row['VOLUME'] > 50000:
         return f"High volume spike detected 🧠"
@@ -84,7 +84,7 @@ with col1:
 with col2:
     st.metric("Active Signals", len(signals))
     st.metric("Avg Score", f"{signals['SCORE'].mean():.3f}")
-    st.success("✅ Connected to NEPSE")
+    st.success("✅ App is Working!")
 
 if st.button("🔄 Refresh Live Data", type="primary"):
     st.cache_data.clear()
