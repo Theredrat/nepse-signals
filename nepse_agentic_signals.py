@@ -19,44 +19,50 @@ def fetch_nepse_data():
             data = scraper.get_today_price()
             df = pd.DataFrame(data)
             
-            # Robust column mapping for real nepse-scraper
+            # Safe column mapping
             rename_map = {
                 'symbol': 'SYMBOL',
                 'lastTradedPrice': 'LTP',
+                'closingPrice': 'LTP',
                 'change': 'CHANGE%',
+                'percentChange': 'CHANGE%',
                 'volume': 'VOLUME',
                 'totalTrades': 'TRADES',
-                'closingPrice': 'LTP',
-                'percentChange': 'CHANGE%',
                 'noOfTransactions': 'TRADES'
             }
             df = df.rename(columns=rename_map)
             
-            # Keep available columns
-            needed = ['SYMBOL', 'LTP', 'CHANGE%', 'VOLUME', 'TRADES']
-            available = [col for col in needed if col in df.columns]
-            df = df[available]
+            # Create missing columns safely
+            if 'SYMBOL' not in df.columns:
+                df['SYMBOL'] = df.get('symbol', 'Unknown')
+            if 'LTP' not in df.columns:
+                df['LTP'] = 0.0
+            if 'CHANGE%' not in df.columns:
+                df['CHANGE%'] = 0.0
+            if 'VOLUME' not in df.columns:
+                df['VOLUME'] = 0
+            if 'TRADES' not in df.columns:
+                df['TRADES'] = 0
             
-            # Convert to numbers
-            for col in ['CHANGE%', 'VOLUME', 'TRADES']:
-                if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
+            # Convert numbers
+            for col in ['LTP', 'CHANGE%', 'VOLUME', 'TRADES']:
+                df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
             
-            return df
+            return df[['SYMBOL', 'LTP', 'CHANGE%', 'VOLUME', 'TRADES']]
     except Exception as e:
-        st.error(f"⚠️ Data issue: {str(e)[:200]}\nPlease refresh.")
-        return pd.DataFrame()
+        st.error(f"⚠️ Data issue: {str(e)[:150]}\nPlease try Refresh button.")
+        return pd.DataFrame(columns=['SYMBOL', 'LTP', 'CHANGE%', 'VOLUME', 'TRADES'])
 
 stocks = fetch_nepse_data()
 
-if stocks.empty or len(stocks) == 0:
+if len(stocks) == 0:
     st.stop()
 
 def agentic_score(row):
-    mom_score = max(0, min(1, (row.get('CHANGE%', 0) + 2) / 5))
-    vol_score = 1.0 if row.get('VOLUME', 0) > 15000 else row.get('VOLUME', 0) / 15000
-    trade_score = 1.0 if row.get('TRADES', 0) > 100 else row.get('TRADES', 0) / 100
-    total = round(0.5 * mom_score + 0.3 * vol_score + 0.2 * trade_score, 3)
+    mom = max(0, min(1, (row['CHANGE%'] + 2) / 5))
+    vol = 1.0 if row['VOLUME'] > 15000 else row['VOLUME'] / 15000
+    trade = 1.0 if row['TRADES'] > 100 else row['TRADES'] / 100
+    total = round(0.5 * mom + 0.3 * vol + 0.2 * trade, 3)
     return max(0.23, min(0.95, total))
 
 stocks['SCORE'] = stocks.apply(agentic_score, axis=1)
@@ -68,10 +74,10 @@ signals = stocks[stocks['SCORE'] >= 0.23].copy()
 signals = signals.sort_values('SCORE', ascending=False).reset_index(drop=True)
 
 def generate_note(row):
-    if row.get('CHANGE%', 0) > 1.5:
-        return f"Strong momentum (+{row.get('CHANGE%', 0):.2f}%) 🧠"
-    elif row.get('VOLUME', 0) > 50000:
-        return f"High volume spike detected 🧠"
+    if row['CHANGE%'] > 1.5:
+        return f"Strong momentum (+{row['CHANGE%']:.2f}%) 🧠"
+    elif row['VOLUME'] > 50000:
+        return f"High volume spike 🧠"
     else:
         return f"Stable conservative signal 🧠"
 
@@ -80,8 +86,8 @@ signals['AGENT_NOTE'] = signals.apply(generate_note, axis=1)
 col1, col2 = st.columns([3, 1])
 with col1:
     st.subheader("📊 Live Agentic Signals")
-    display_df = signals[['SYMBOL', 'LTP', 'CHANGE%', 'SCORE', 'CONFIDENCE', 'AGENT_NOTE']]
-    styled = display_df.style.background_gradient(cmap='RdYlGn', subset=['SCORE', 'CHANGE%'])
+    display_cols = ['SYMBOL', 'LTP', 'CHANGE%', 'SCORE', 'CONFIDENCE', 'AGENT_NOTE']
+    styled = signals[display_cols].style.background_gradient(cmap='RdYlGn', subset=['SCORE', 'CHANGE%'])
     st.dataframe(styled, use_container_width=True, hide_index=True)
 
 with col2:
@@ -93,4 +99,4 @@ if st.button("🔄 Refresh Live Data", type="primary"):
     st.cache_data.clear()
     st.rerun()
 
-st.caption("Your NEPSE Agentic Signals App • Educational only")
+st.caption("Your own NEPSE Signals Platform • Educational only")
